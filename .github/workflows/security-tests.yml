@@ -1,0 +1,93 @@
+name: Security Tests
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  security-tests-non-db:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          extensions: pdo
+          tools: composer:v2
+
+      - name: Install dependencies
+        run: composer install --no-interaction --prefer-dist
+
+      - name: Run security regression suite
+        env:
+          XDEBUG_MODE: off
+        run: composer test:security
+
+  security-tests-mariadb:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    services:
+      mariadb:
+        image: mariadb:11
+        env:
+          MARIADB_ROOT_PASSWORD: root
+          MARIADB_DATABASE: nexus_user
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mariadb-admin ping -h 127.0.0.1 -uroot -proot --silent"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=12
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          extensions: pdo, pdo_mysql
+          tools: composer:v2
+
+      - name: Install dependencies
+        run: composer install --no-interaction --prefer-dist
+
+      - name: Wait for MariaDB
+        run: |
+          php -r '
+            $dsn = "mysql:host=127.0.0.1;port=3306;dbname=nexus_user;charset=utf8mb4";
+            $ok = false;
+            for ($i = 0; $i < 30; $i++) {
+                try {
+                    new PDO($dsn, "root", "root", [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]);
+                    $ok = true;
+                    break;
+                } catch (Throwable $e) {
+                    sleep(2);
+                }
+            }
+            if (!$ok) {
+                fwrite(STDERR, "MariaDB did not become ready in time\n");
+                exit(1);
+            }
+          '
+
+      - name: Run security regression suite (DB-backed)
+        env:
+          XDEBUG_MODE: off
+          NEXUS_DB_DSN: mysql:host=127.0.0.1;port=3306;dbname=nexus_user;charset=utf8mb4
+          NEXUS_DB_USER: root
+          NEXUS_DB_PASS: root
+        run: composer test:security

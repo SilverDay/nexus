@@ -1,0 +1,25 @@
+{
+  "name": "silverday/nexus-dropin-user",
+  "description": "Security-first, framework-agnostic PHP 8.2+ drop-in user management module",
+  "type": "library",
+  "require": {
+    "php": "^8.2",
+    "ext-pdo": "*",
+    "psr/log": "^3.0"
+  },
+  "autoload": {
+    "psr-4": {
+      "Nexus\\DropInUser\\": "src/"
+    }
+  },
+  "autoload-dev": {
+    "psr-4": {
+      "Nexus\\DropInUser\\Tests\\": "tests/"
+    }
+  },
+  "scripts": {
+    "test:security": "bash tests/run-security-tests.sh"
+  },
+  "minimum-stability": "stable",
+  "prefer-stable": true
+}
