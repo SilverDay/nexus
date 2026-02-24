@@ -5,7 +5,8 @@
   "require": {
     "php": "^8.2",
     "ext-pdo": "*",
-    "psr/log": "^3.0"
+    "psr/log": "^3.0",
+    "web-auth/webauthn-lib": "^4.8"
   },
   "autoload": {
     "psr-4": {
@@ -18,7 +19,9 @@
     }
   },
   "scripts": {
-    "test:security": "bash tests/run-security-tests.sh"
+    "test:security": "bash tests/run-security-tests.sh",
+    "test:security:db": "bash tests/run-security-tests-db.sh",
+    "test:security:db:webauthn": "NEXUS_PASSKEY_WEBAUTHN_ENABLED=1 NEXUS_SECURITY_TEST_SCRIPT=tests/security/router_webauthn_enabled_test.sh bash tests/run-security-tests-db.sh"
   },
   "minimum-stability": "stable",
   "prefer-stable": true

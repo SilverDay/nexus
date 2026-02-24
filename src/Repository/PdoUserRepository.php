@@ -18,10 +18,13 @@ final class PdoUserRepository implements UserRepositoryInterface
         $stmt = $this->pdo->prepare(
             'SELECT id, username, email, real_name, password_hash, status, email_verified_at
              FROM users
-             WHERE deleted_at IS NULL AND (username = :identifier OR email = :identifier)
+             WHERE deleted_at IS NULL AND (username = :username_identifier OR email = :email_identifier)
              LIMIT 1'
         );
-        $stmt->execute(['identifier' => $identifier]);
+        $stmt->execute([
+            'username_identifier' => $identifier,
+            'email_identifier' => $identifier,
+        ]);
         $user = $stmt->fetch();
 
         return is_array($user) ? $user : null;

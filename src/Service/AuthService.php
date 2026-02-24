@@ -1,11 +1,11 @@
 <?php
-
 declare(strict_types=1);
 
 namespace Nexus\DropInUser\Service;
 
 use Nexus\DropInUser\Contract\AuditLoggerInterface;
 use Nexus\DropInUser\Contract\AuthServiceInterface;
+use Nexus\DropInUser\Contract\EmailTemplateProviderInterface;
 use Nexus\DropInUser\Contract\EmailVerificationServiceInterface;
 use Nexus\DropInUser\Contract\EventDispatcherInterface;
 use Nexus\DropInUser\Contract\MailerInterface;
@@ -14,7 +14,6 @@ use Nexus\DropInUser\Contract\RememberMeServiceInterface;
 use Nexus\DropInUser\Contract\RoleRepositoryInterface;
 use Nexus\DropInUser\Contract\RiskEngineInterface;
 use Nexus\DropInUser\Contract\StepUpServiceInterface;
-use Nexus\DropInUser\Contract\TokenServiceInterface;
 use Nexus\DropInUser\Contract\UserRepositoryInterface;
 use Nexus\DropInUser\Contract\UserProfileFieldRepositoryInterface;
 use Nexus\DropInUser\Observability\RequestContext;
@@ -32,13 +31,13 @@ final class AuthService implements AuthServiceInterface
     public function __construct(
         private readonly UserRepositoryInterface $users,
         private readonly PasswordHasher $passwordHasher,
-        private readonly TokenServiceInterface $tokenService,
         private readonly AuditLoggerInterface $auditLogger,
         private readonly UserProfileFieldRepositoryInterface $profileFields,
         private readonly ProfileFieldPolicyInterface $profileFieldPolicy,
         private readonly RateLimiter $rateLimiter,
         private readonly EmailVerificationServiceInterface $emailVerification,
         private readonly MailerInterface $mailer,
+        private readonly EmailTemplateProviderInterface $emailTemplates,
         private readonly RememberMeServiceInterface $rememberMeService,
         private readonly RoleRepositoryInterface $roles,
         private readonly RiskEngineInterface $riskEngine,
@@ -48,6 +47,9 @@ final class AuthService implements AuthServiceInterface
         private readonly bool $bindUserAgent,
         private readonly RequestContext $requestContext,
         private readonly PDO $pdo,
+        private readonly ?string $verificationLinkTemplate = null,
+        /** @var list<string> */
+        private readonly array $adminRegistrationNotificationRecipients = [],
         ?LoggerInterface $logger = null,
     ) {
         $this->logger = $logger ?? new NullLogger();
@@ -84,11 +86,19 @@ final class AuthService implements AuthServiceInterface
         $this->profileFields->upsertFields((int) $user['id'], $validatedProfile['fields']);
 
         $verificationToken = $this->emailVerification->createForUser((int) $user['id']);
+        $verificationMail = $this->emailTemplates->render('verify_email', [
+            'token' => $verificationToken,
+            'verify_link' => $this->buildVerificationLink($verificationToken),
+            'username' => (string) $user['username'],
+            'email' => (string) $user['email'],
+            'real_name' => (string) $user['real_name'],
+        ]);
         $this->mailer->send(
             (string) $user['email'],
-            'Verify your email',
-            'Use this token to verify your email: ' . $verificationToken
+            $verificationMail['subject'],
+            $verificationMail['text']
         );
+        $this->notifyAdminsOfNewRegistration($user, $context);
 
         $this->auditLogger->log('user.registered', (int) $user['id'], (int) $user['id'], $context);
         $this->events->dispatch('user.registered', [
@@ -101,6 +111,54 @@ final class AuthService implements AuthServiceInterface
         ]);
 
         return ['ok' => true, 'message' => 'If registration is successful, a verification email is sent.'];
+    }
+
+    /**
+     * @param array<string,mixed> $user
+     * @param array<string,mixed> $context
+     */
+    private function notifyAdminsOfNewRegistration(array $user, array $context): void
+    {
+        foreach ($this->adminRegistrationNotificationRecipients as $recipient) {
+            if (!filter_var($recipient, FILTER_VALIDATE_EMAIL)) {
+                continue;
+            }
+
+            try {
+                $mail = $this->emailTemplates->render('admin_new_user_registered', [
+                    'user_id' => (string) ($user['id'] ?? ''),
+                    'username' => (string) ($user['username'] ?? ''),
+                    'email' => (string) ($user['email'] ?? ''),
+                    'real_name' => (string) ($user['real_name'] ?? ''),
+                    'request_id' => (string) ($context['request_id'] ?? ''),
+                    'source_ip' => (string) ($context['source_ip'] ?? ''),
+                ]);
+
+                $this->mailer->send($recipient, $mail['subject'], $mail['text']);
+            } catch (\Throwable $exception) {
+                $this->logger->warning('auth.register.admin_notification_failed', [
+                    'request_id' => $context['request_id'] ?? null,
+                    'target_email' => $recipient,
+                ]);
+            }
+        }
+    }
+
+    private function buildVerificationLink(string $token): string
+    {
+        $template = $this->verificationLinkTemplate;
+        if (!is_string($template) || trim($template) === '') {
+            return '';
+        }
+
+        $trimmedTemplate = trim($template);
+        if (str_contains($trimmedTemplate, '{{token}}')) {
+            return str_replace('{{token}}', rawurlencode($token), $trimmedTemplate);
+        }
+
+        $separator = str_contains($trimmedTemplate, '?') ? '&' : '?';
+
+        return $trimmedTemplate . $separator . 'token=' . rawurlencode($token);
     }
 
     public function login(string $identifier, string $password, bool $rememberMe = false): array
@@ -145,8 +203,19 @@ final class AuthService implements AuthServiceInterface
         }
 
         if ($riskDecision === RiskDecision::REQUIRE_STEP_UP) {
+            $challengeStarted = $this->stepUpService->startChallenge((int) $user['id'], $context);
+            if (!$challengeStarted) {
+                $this->auditLogger->log('auth.login.step_up_unavailable', (int) $user['id'], (int) $user['id'], $context);
+                $this->events->dispatch('auth.login.step_up_unavailable', [
+                    'user_id' => (int) $user['id'],
+                    'request_id' => $context['request_id'],
+                ]);
+                $this->logger->warning('auth.login.step_up_unavailable', ['user_id' => (int) $user['id'], 'request_id' => $context['request_id']]);
+
+                return ['ok' => false, 'message' => 'Invalid credentials.'];
+            }
+
             $this->auditLogger->log('auth.login.require_step_up', (int) $user['id'], (int) $user['id'], $context);
-            $this->stepUpService->startChallenge((int) $user['id'], $context);
             $this->events->dispatch('auth.login.require_step_up', [
                 'user_id' => (int) $user['id'],
                 'request_id' => $context['request_id'],

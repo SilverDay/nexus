@@ -1,177 +1,299 @@
 # Nexus Drop-In User Module
 
+[![Security Tests](https://github.com/SilverDay/nexus/actions/workflows/security-tests.yml/badge.svg)](https://github.com/SilverDay/nexus/actions/workflows/security-tests.yml)
+
 Security-first, framework-agnostic PHP 8.2+ user management module for MariaDB/MySQL.
 
-## Current milestone
+## What this is
 
-This repository now contains a first-working scaffold with:
+A **drop-in auth/user module** you can mount into an existing PHP app.
 
-- PSR-4 package setup (`composer.json`)
-- Idempotent schema migration runner (`src/Database/MigrationRunner.php`)
-- Initial security-focused schema (`src/Database/Migrations/InitialSchemaMigration.php`)
-- Core auth flow foundation (`src/Service/AuthService.php`)
-- PDO-backed audit logging (`src/Audit/PdoAuditLogger.php`)
-- PDO-backed rate limiting (`src/RateLimit/PdoRateLimiter.php`)
-- JSON handler example (`src/Controller/AuthJsonController.php`)
-- Minimal demo router (`examples/minimal_router.php`)
-- Pluggable profile-field KV storage (`user_profile_fields`) and profile endpoints
+- Not a full framework
+- Not a standalone IAM server
+- Built for embedding and extension
 
-## Architecture snapshot
+## What you get
 
-- `Nexus\DropInUser\Database`: connection factory, migration contracts, migration runner.
-- `Nexus\DropInUser\Repository`: persistence layer interfaces and PDO implementations.
-- `Nexus\DropInUser\Service`: auth orchestration and domain services.
-- `Nexus\DropInUser\Security`: password hashing, token hashing/generation, CSRF, security headers.
-- `Nexus\DropInUser\Audit`: auditable event persistence with context sanitization.
-- `Nexus\DropInUser\Controller`: mountable controller/handler classes (router-agnostic).
+- Registration + email verification
+- Login (username or email) + secure sessions + remember-me
+- Password reset + password change
+- Role checks (`user`, `admin`, `super_admin`) with permission checks (`can()`)
+- TOTP + recovery codes + step-up verification
+- Passkeys (WebAuthn) with safe default disabled mode
+- Google OIDC login hooks
+- Session/device listing and revocation
+- Audit logging for security-sensitive actions
+- HTML modules and JSON endpoints
 
-## Local setup
+## Quick start
 
 1. Install dependencies:
 
-	```bash
-	composer install
-	```
+```bash
+composer install
+```
 
-2. Configure database env vars:
+2. Configure database (environment mode):
 
-	```bash
-	export NEXUS_DB_DSN='mysql:host=127.0.0.1;port=3306;dbname=nexus_user;charset=utf8mb4'
-	export NEXUS_DB_USER='root'
-	export NEXUS_DB_PASS=''
-	```
+```bash
+export NEXUS_DB_DSN='mysql:host=127.0.0.1;port=3306;dbname=nexus_user;charset=utf8mb4'
+export NEXUS_DB_USER='root'
+export NEXUS_DB_PASS=''
+```
 
 3. Run migrations:
 
-	```bash
-	php migrations/run.php
-	```
+```bash
+php migrations/run.php
+```
 
 4. Start demo router:
 
-	```bash
-	php -S 127.0.0.1:8080 examples/minimal_router.php
-	```
+```bash
+php -S 127.0.0.1:8080 examples/minimal_router.php
+```
 
-5. Run security regression tests:
+## Configuration modes
 
-	```bash
-	composer test:security
-	```
+The module now supports **both** environment-based and file-based configuration.
 
-## Example endpoints
+### A) Environment variables
 
-- `POST /register` with `username`, `email`, `realname`, `password`, optional `profile_fields[key]=value`
-- `POST /login` with `identifier` (username or email), `password`, optional `remember_me=1`
-- `POST /verify-email` with `token`
-- `POST /password-reset/request` with `identifier`
-- `POST /password-reset/confirm` with `token`, `new_password`
-- `GET /profile` (authenticated) to read current profile and custom fields
-- `POST /profile` (authenticated) with `realname`, optional `profile_fields[key]=value` to update (`csrf_token` or `X-CSRF-Token` required)
+Used by default when no config file is provided.
 
-### Admin endpoints (require authenticated admin/super_admin session)
+Primary keys:
 
-- `GET /admin/users?q=&limit=&offset=`
-- `POST /admin/user/update` with `target_user_id` plus any of `real_name`, `email`, `status`
-- `POST /admin/user/assign-role` with `target_user_id`, `role`
-- `POST /admin/user/revoke-role` with `target_user_id`, `role`
-- `POST /admin/user/block` with `target_user_id`
-- `POST /admin/user/soft-delete` with `target_user_id`
-- `POST /admin/user/revoke-sessions` with `target_user_id`
+- `NEXUS_DB_DSN`
+- `NEXUS_DB_USER`
+- `NEXUS_DB_PASS`
+- `NEXUS_TOTP_KEY`
+- `NEXUS_GOOGLE_OIDC_CLIENT_ID`
+- `NEXUS_GOOGLE_OIDC_CLIENT_SECRET`
+- `NEXUS_GOOGLE_OIDC_REDIRECT_URI`
+- `NEXUS_PASSKEY_WEBAUTHN_ENABLED`
 
-All authenticated JSON `POST` endpoints (`/profile` and `/admin/*`) require CSRF protection via `csrf_token` body field or `X-CSRF-Token` header.
+### B) Config file (`NEXUS_CONFIG_FILE`)
 
-### Server-rendered HTML modules
+Point `NEXUS_CONFIG_FILE` to a PHP file returning an array.
 
-- `GET /ui/register` and `POST /ui/register`
-- `GET /ui/login` and `POST /ui/login`
-- `GET /ui/verify-email` and `POST /ui/verify-email`
-- `GET /ui/password-reset/request` and `POST /ui/password-reset/request`
-- `GET /ui/password-reset/confirm` and `POST /ui/password-reset/confirm`
-- `GET /ui/profile` and `POST /ui/profile` (authenticated)
+```bash
+export NEXUS_CONFIG_FILE=/workspaces/nexus/examples/config/module.config.php
+```
 
-All `POST /ui/*` requests require a valid `csrf_token` generated from the matching GET form.
+See the template in `examples/config/module.config.php`.
 
-Custom profile fields use key-value storage in `user_profile_fields` and are submitted as `profile[key]` (HTML) or `profile_fields[key]` (JSON).
+Supported config keys include:
 
-Field acceptance/validation is controlled by a pluggable policy (`ProfileFieldPolicyInterface`).
-The demo router uses `DatabaseProfileFieldPolicy` backed by `profile_field_definitions` and rejects unknown keys.
+- Core config: `db_dsn`, `db_user`, `db_password`, `from_email`, `from_name`
+- Security behavior: `secure_cookies`, `same_site`, `ip_binding_mode`, `bind_user_agent`
+- Phase-2 toggles/secrets: `totp_key`, `google_oidc_*`, `passkey_webauthn_enabled`
+- Mail transport: `mail_transport`, `smtp_host`, `smtp_port`, `smtp_username`, `smtp_password`, `smtp_encryption`, `smtp_timeout_seconds`
+- Mail template files: `email_template_locale`, `email_template_roots`, `verification_link_template`, `admin_registration_notify_to`
+- Optional mail fallback templates: `email_templates`
+- UI fields: `profile_fields`
 
-Host apps can define profile fields centrally with `ProfileFieldConfig` and set per-field user controls:
-- `user_visible`: whether the field is shown in user-facing registration/profile views
-- `user_editable`: whether the user can submit changes for that field
-- `admin_visible`: whether the field is shown in admin user-profile read views
-- `label`: display label for HTML modules
+### Email text and transport configuration
 
-The policy enforces editability server-side, not only in the UI.
+You can configure both **what is sent** and **how it is sent** from the config file.
 
-Runtime admin management is available (admin/super_admin only):
-- JSON: `GET /admin/profile-fields`, `POST /admin/profile-fields/upsert`, `POST /admin/profile-fields/delete`
-- HTML: `GET /ui/admin/profile-fields`, `POST /ui/admin/profile-fields/upsert`, `POST /ui/admin/profile-fields/delete`
+Transport options:
 
-Read-only admin user profile field views:
-- JSON: `GET /admin/user/profile-fields?target_user_id=...`
-- HTML: `GET /ui/admin/user/profile-fields?target_user_id=...`
+- `mail_transport = null` (default; no mail sent)
+- `mail_transport = php` (uses PHP `mail()`)
+- `mail_transport = smtp` (uses SMTP with optional AUTH/STARTTLS)
 
-Both views support `q`, `limit`, and `offset` for search and pagination.
+Example transport config:
 
-These views only include fields with `admin_visible = true`.
+```php
+'mail_transport' => 'smtp',
+'smtp_host' => 'smtp.example.com',
+'smtp_port' => 587,
+'smtp_username' => 'smtp-user',
+'smtp_password' => 'smtp-password',
+'smtp_encryption' => 'tls', // tls|ssl|none
+'smtp_timeout_seconds' => 10,
+'verification_link_template' => 'https://app.example.com/verify-email?token={{token}}',
+'admin_registration_notify_to' => 'security@example.com,ops@example.com',
+```
 
-Admin user list responses include quick links per user:
-- `profile_fields_url`
-- `profile_fields_ui_url`
+Email text is file-based by default. Template file lookup is:
 
-Definitions are persisted in `profile_field_definitions`, and user-facing registration/profile forms reflect changes immediately.
+- `<root>/<locale>/<template_name>.subject.txt`
+- `<root>/<locale>/<template_name>.body.txt`
+- fallback to language-only locale (for example `de` from `de-DE`)
+- fallback to `en`
 
-All user-facing auth errors are generic to avoid account enumeration.
+Example file-template config:
 
-By default, `/password-reset/request` never returns reset tokens. For local debugging only, set `ModuleConfig::$exposeDebugTokens = true` to include `demo_token` in responses.
+```php
+'email_template_locale' => 'de-DE',
+'email_template_roots' => [
+	__DIR__ . '/../../templates/email',
+	'/opt/myapp/mail-templates',
+],
+```
 
-The demo emits an `X-Request-Id` response header and propagates that ID into audit entries and PSR-3 log context.
+Default template example:
 
-## Security regression tests
+- `templates/email/en/verify_email.subject.txt`
+- `templates/email/en/verify_email.body.txt`
 
-- `tests/security/request_context_test.php` validates request-id sanitization/allowlist behavior without database dependencies.
-- `tests/security/php_mail_mailer_test.php` validates `PhpMailMailer` rejects invalid addresses and header-injection input.
-- `tests/security/profile_field_policy_test.php` validates regex-safe matching behavior and absolute profile-field length limits.
-- `tests/security/router_security_test.sh` validates:
-	- authenticated JSON `POST /profile` is rejected without CSRF
-	- authenticated JSON `POST /profile` succeeds with `X-CSRF-Token`
-	- `POST /password-reset/request` does not expose `demo_token` by default
-- `tests/run-security-tests.sh` is the runner used by `composer test:security`.
-- The runner always executes request-id sanitization tests, and executes database-backed router tests when MariaDB/MySQL prerequisites are available.
-- When MariaDB/MySQL or `pdo_mysql` is unavailable, database-backed router tests are skipped with an explicit message and the non-database security tests still run.
-- Database-backed tests require a reachable MariaDB/MySQL configured via `NEXUS_DB_DSN`, `NEXUS_DB_USER`, `NEXUS_DB_PASS`.
+Default mail notification templates shipped:
 
-### CI automation
+- `verify_email`
+- `password_reset_requested`
+- `password_reset_completed`
+- `admin_new_user_registered`
 
-- GitHub Actions workflow [`.github/workflows/security-tests.yml`](.github/workflows/security-tests.yml) runs `composer test:security` on pushes and pull requests to `main` with:
-	- a non-database job for always-on fast security checks
-	- a MariaDB-backed job so router integration security tests run without skip
+Template file contents are preformatted text with placeholders:
 
-## Phase-2 extension contracts already available
+```text
+Please verify your account
+```
 
-- Step-up orchestration: `StepUpServiceInterface` (with `NullStepUpService` default)
-- TOTP hooks: `TotpServiceInterface`
-- Passkey hooks: `PasskeyServiceInterface`
-- OIDC hooks: `OidcProviderInterface`
-- Recovery code hooks: `RecoveryCodeServiceInterface`
-- Event hooks: `EventDispatcherInterface` (with `NullEventDispatcher` default)
+```text
+Hi {{real_name}},
 
-Current auth flow emits event names: `user.registered`, `auth.login.succeeded`, `auth.login.denied_risk`, `auth.login.require_step_up`.
+Your verification token: {{token}}
+```
 
-## Security defaults currently implemented
+Optional array fallback when no file template exists:
+
+```php
+'email_templates' => [
+	'verify_email' => [
+		'subject' => 'Please verify your account',
+		'text' => "Hi {{real_name}},\n\nYour verification token: {{token}}",
+	],
+],
+```
+
+Available placeholders for `verify_email`:
+
+- `{{token}}`
+- `{{verify_link}}`
+- `{{username}}`
+- `{{email}}`
+- `{{real_name}}`
+
+Available placeholders for `admin_new_user_registered`:
+
+- `{{user_id}}`
+- `{{username}}`
+- `{{email}}`
+- `{{real_name}}`
+- `{{source_ip}}`
+- `{{request_id}}`
+
+When `admin_registration_notify_to` is set (array or comma-separated list), admin notifications are emitted on successful registration using the `admin_new_user_registered` template.
+
+### Host app database reuse (drop-in embedding)
+
+For host-app embedding, the config file can provide a **shared PDO instance** via `pdo`.
+
+If `pdo` is present, the demo router and migration runner reuse it instead of opening a separate DB connection.
+
+This lets the module use the same database/session context as the embedding application.
+
+### Host app bootstrap example
+
+For a concrete shared-PDO integration example, see:
+
+- `examples/host_app_bootstrap.php`
+
+Run it like this:
+
+```bash
+php -S 127.0.0.1:8090 examples/host_app_bootstrap.php
+```
+
+It exposes sample host-mounted routes:
+
+- `POST /host/auth/register`
+- `POST /host/auth/login`
+
+## Example endpoints (JSON)
+
+- `POST /register`
+- `POST /login`
+- `POST /verify-email`
+- `POST /password-reset/request`
+- `POST /password-reset/confirm`
+- `POST /totp/enroll/begin` (auth + CSRF)
+- `POST /totp/enroll/confirm` (auth + CSRF)
+- `POST /recovery-codes/regenerate` (auth + CSRF)
+- `POST /step-up/verify`
+- `POST /passkeys/register/begin` (auth + CSRF)
+- `POST /passkeys/register/finish` (auth + CSRF)
+- `POST /passkeys/authenticate/begin` (CSRF)
+- `POST /passkeys/authenticate/finish` (CSRF)
+- `GET /passkeys/list` (auth)
+- `POST /passkeys/revoke` (auth + CSRF)
+- `GET /sessions` (auth)
+- `POST /sessions/revoke` (auth + CSRF)
+- `GET /oidc/google/start`
+- `GET /oidc/google/callback`
+
+## HTML modules
+
+- Register/login/verify-email/password-reset
+- TOTP enroll + recovery code regeneration
+- Step-up verification
+- Passkey list + revoke
+- Sessions/devices list + revoke
+- Profile
+
+All `POST /ui/*` routes require valid CSRF tokens.
+
+## Testing
+
+Fast security suite:
+
+```bash
+composer test:security
+```
+
+Full DB-backed security suite (ephemeral MariaDB):
+
+```bash
+composer test:security:db
+```
+
+Focused WebAuthn-enabled DB path:
+
+```bash
+composer test:security:db:webauthn
+```
+
+## Security defaults
 
 - PDO prepared statements
-- `password_hash()` with Argon2id preferred
-- Random token generation via `random_bytes()`
-- Hashing of stored security tokens
+- Argon2id password hashing (preferred)
+- `random_bytes()` token generation
+- Hashed tokens at rest
 - Session ID regeneration on login
-- Secure security-header helper
-- Rate-limit buckets for login and registration
-- Audit events for registration and login outcomes
-- RBAC role checks (`user`, `admin`, `super_admin`) with default permissions seed
-- Super Admin protection for privileged role revocation/removal
-- Pluggable risk engine with default outcomes: `allow`, `require_step_up`, `deny`
-- Configurable session binding modes via `ModuleConfig::$ipBindingMode` (`off`, `strict`, `subnet`, `risk-based`)
-- Optional user-agent binding via `ModuleConfig::$bindUserAgent`
+- CSRF enforcement on state-changing routes
+- Generic auth failures (no account enumeration)
+- Audit events for critical auth/security actions
+- Pluggable risk engine with `allow`, `require_step_up`, `deny`
+
+## Architecture notes
+
+Key extension interfaces:
+
+- `StepUpServiceInterface`
+- `TotpServiceInterface`
+- `RecoveryCodeServiceInterface`
+- `PasskeyServiceInterface`
+- `PasskeyCeremonyValidatorInterface`
+- `OidcProviderInterface`
+- `EventDispatcherInterface`
+
+Primary composition roots:
+
+- `examples/minimal_router.php`
+- `migrations/run.php`
+
+## Current status
+
+Phase-1 and planned Phase-2 capabilities are implemented in this repository, with DB-backed security regression coverage and CI workflow validation.

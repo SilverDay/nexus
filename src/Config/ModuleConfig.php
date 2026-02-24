@@ -4,6 +4,14 @@ declare(strict_types=1);
 
 namespace Nexus\DropInUser\Config;
 
+/**
+ * Immutable runtime configuration for core module behavior.
+ *
+ * `ModuleConfig` intentionally covers stable, security-relevant defaults used
+ * across services. Integration-specific toggles (e.g., OIDC client details,
+ * passkey feature flags) are loaded separately via `ModuleConfigLoader` and
+ * passed into composition roots such as `examples/minimal_router.php`.
+ */
 final class ModuleConfig
 {
     public function __construct(

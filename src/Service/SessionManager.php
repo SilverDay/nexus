@@ -10,6 +10,11 @@ use Nexus\DropInUser\Observability\RequestContext;
 use Nexus\DropInUser\Risk\RiskDecision;
 use PDO;
 
+/**
+ * Validates and maintains active sessions using risk-engine decisions.
+ *
+ * On non-allow decisions, the current session is revoked immediately.
+ */
 final class SessionManager implements SessionManagerInterface
 {
     public function __construct(
@@ -21,6 +26,10 @@ final class SessionManager implements SessionManagerInterface
     ) {
     }
 
+    /**
+     * Validates the current PHP session ID for the provided user and updates
+     * `last_seen_at` on success.
+     */
     public function validateCurrentSession(int $userId): bool
     {
         $sessionId = session_id();
@@ -63,6 +72,9 @@ final class SessionManager implements SessionManagerInterface
         return true;
     }
 
+    /**
+     * Revokes the given session identifier if it is still active.
+     */
     public function revokeSessionById(string $sessionId): void
     {
         $stmt = $this->pdo->prepare(

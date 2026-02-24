@@ -35,6 +35,16 @@ jobs:
   security-tests-mariadb:
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        suite:
+          - name: default-db
+            command: composer test:security
+          - name: webauthn-enabled
+            command: |
+              chmod +x tests/security/router_webauthn_enabled_test.sh
+              bash tests/security/router_webauthn_enabled_test.sh
 
     services:
       mariadb:
@@ -84,10 +94,11 @@ jobs:
             }
           '
 
-      - name: Run security regression suite (DB-backed)
+      - name: Run security suite (${{ matrix.suite.name }})
         env:
           XDEBUG_MODE: off
           NEXUS_DB_DSN: mysql:host=127.0.0.1;port=3306;dbname=nexus_user;charset=utf8mb4
           NEXUS_DB_USER: root
           NEXUS_DB_PASS: root
-        run: composer test:security
+          NEXUS_PASSKEY_WEBAUTHN_ENABLED: ${{ matrix.suite.name == 'webauthn-enabled' && '1' || '0' }}
+        run: ${{ matrix.suite.command }}

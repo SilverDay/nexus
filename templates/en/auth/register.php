@@ -45,6 +45,10 @@
 
         <button type="submit">Create account</button>
     </form>
+
+    <p>
+        <a href="/oidc/google/start">Continue with Google</a>
+    </p>
 </main>
 </body>
 </html>

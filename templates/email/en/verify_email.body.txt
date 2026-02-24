@@ -1,0 +1,6 @@
+Hello {{real_name}},
+
+Use this token to verify your email: {{token}}
+Verification link: {{verify_link}}
+
+If you did not sign up, you can ignore this message.

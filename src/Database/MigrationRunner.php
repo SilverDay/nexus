@@ -29,9 +29,13 @@ final class MigrationRunner
             try {
                 $migration->up($pdo);
                 $this->markApplied($pdo, $migration);
-                $pdo->commit();
+                if ($pdo->inTransaction()) {
+                    $pdo->commit();
+                }
             } catch (\Throwable $exception) {
-                $pdo->rollBack();
+                if ($pdo->inTransaction()) {
+                    $pdo->rollBack();
+                }
                 throw $exception;
             }
         }

@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace Nexus\DropInUser\Service;
 
 use Nexus\DropInUser\Contract\AuditLoggerInterface;
+use Nexus\DropInUser\Contract\EmailTemplateProviderInterface;
+use Nexus\DropInUser\Contract\MailerInterface;
 use Nexus\DropInUser\Contract\PasswordResetServiceInterface;
 use Nexus\DropInUser\Contract\TokenServiceInterface;
 use Nexus\DropInUser\Contract\UserRepositoryInterface;
@@ -25,6 +27,8 @@ final class PasswordResetService implements PasswordResetServiceInterface
         private readonly PasswordHasher $passwordHasher,
         private readonly AuditLoggerInterface $auditLogger,
         private readonly RequestContext $requestContext,
+        private readonly MailerInterface $mailer,
+        private readonly EmailTemplateProviderInterface $emailTemplates,
         private readonly int $ttlSeconds = 1800,
         ?LoggerInterface $logger = null,
     ) {
@@ -57,6 +61,21 @@ final class PasswordResetService implements PasswordResetServiceInterface
             'user_id' => (int) $user['id'],
             'request_id' => $context['request_id'],
         ]);
+
+        try {
+            $mail = $this->emailTemplates->render('password_reset_requested', [
+                'token' => $token,
+                'username' => (string) ($user['username'] ?? ''),
+                'email' => (string) ($user['email'] ?? ''),
+                'real_name' => (string) ($user['real_name'] ?? ''),
+            ]);
+            $this->mailer->send((string) ($user['email'] ?? ''), $mail['subject'], $mail['text']);
+        } catch (\Throwable $exception) {
+            $this->logger->warning('auth.password_reset.mail_failed', [
+                'user_id' => (int) $user['id'],
+                'request_id' => $context['request_id'],
+            ]);
+        }
 
         return $token;
     }
@@ -110,6 +129,23 @@ final class PasswordResetService implements PasswordResetServiceInterface
             );
             $revokeRemember->execute(['user_id' => (int) $row['user_id']]);
 
+            $user = $this->findUserById((int) $row['user_id']);
+            if ($user !== null && isset($user['email'])) {
+                try {
+                    $mail = $this->emailTemplates->render('password_reset_completed', [
+                        'username' => (string) ($user['username'] ?? ''),
+                        'email' => (string) $user['email'],
+                        'real_name' => (string) ($user['real_name'] ?? ''),
+                    ]);
+                    $this->mailer->send((string) $user['email'], $mail['subject'], $mail['text']);
+                } catch (\Throwable $exception) {
+                    $this->logger->warning('auth.password_reset.completed_mail_failed', [
+                        'user_id' => (int) $row['user_id'],
+                        'request_id' => $context['request_id'],
+                    ]);
+                }
+            }
+
             $this->pdo->commit();
 
             $this->auditLogger->log('auth.password_reset.completed', (int) $row['user_id'], (int) $row['user_id'], $context);
@@ -123,5 +159,17 @@ final class PasswordResetService implements PasswordResetServiceInterface
             $this->pdo->rollBack();
             throw $exception;
         }
+    }
+
+    /**
+     * @return array<string,mixed>|null
+     */
+    private function findUserById(int $userId): ?array
+    {
+        $stmt = $this->pdo->prepare('SELECT id, username, email, real_name FROM users WHERE id = :id LIMIT 1');
+        $stmt->execute(['id' => $userId]);
+        $row = $stmt->fetch(PDO::FETCH_ASSOC);
+
+        return is_array($row) ? $row : null;
     }
 }

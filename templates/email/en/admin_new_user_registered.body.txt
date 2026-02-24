@@ -1,0 +1,8 @@
+A new user has registered.
+
+User ID: {{user_id}}
+Username: {{username}}
+Email: {{email}}
+Real name: {{real_name}}
+Source IP: {{source_ip}}
+Request ID: {{request_id}}
