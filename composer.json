@@ -1,6 +1,17 @@
 {
   "name": "silverday/nexus-dropin-user",
   "description": "Security-first, framework-agnostic PHP 8.2+ drop-in user management module",
+  "license": "MIT",
+  "homepage": "https://github.com/SilverDay/nexus",
+  "support": {
+    "issues": "https://github.com/SilverDay/nexus/issues",
+    "source": "https://github.com/SilverDay/nexus"
+  },
+  "authors": [
+    {
+      "name": "SilverDay"
+    }
+  ],
   "type": "library",
   "require": {
     "php": "^8.2",

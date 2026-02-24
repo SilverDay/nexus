@@ -53,6 +53,37 @@ php migrations/run.php
 php -S 127.0.0.1:8080 examples/minimal_router.php
 ```
 
+## Install in a host app
+
+Use Composer to install this module into your application. This is the recommended approach for production usage.
+
+If the package is available on Packagist:
+
+```bash
+composer require silverday/nexus-dropin-user:^0.2.1
+```
+
+If you want to install directly from GitHub (VCS source):
+
+```json
+{
+	"repositories": [
+		{
+			"type": "vcs",
+			"url": "https://github.com/SilverDay/nexus.git"
+		}
+	]
+}
+```
+
+Then run:
+
+```bash
+composer require silverday/nexus-dropin-user:^0.2.1
+```
+
+Manual unzip/copy into your app directory is possible for experiments, but not recommended because dependency updates, autoloading, and version pinning are harder to maintain.
+
 ## Configuration modes
 
 The module now supports **both** environment-based and file-based configuration.
