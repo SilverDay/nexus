@@ -94,12 +94,12 @@ jobs:
             }
           '
 
-        - name: Apply migrations
-          env:
-            NEXUS_DB_DSN: mysql:host=127.0.0.1;port=3306;dbname=nexus_user;charset=utf8mb4
-            NEXUS_DB_USER: root
-            NEXUS_DB_PASS: root
-          run: php migrations/run.php
+      - name: Apply migrations
+        env:
+          NEXUS_DB_DSN: mysql:host=127.0.0.1;port=3306;dbname=nexus_user;charset=utf8mb4
+          NEXUS_DB_USER: root
+          NEXUS_DB_PASS: root
+        run: php migrations/run.php
 
       - name: Run security suite (${{ matrix.suite.name }})
         env:
