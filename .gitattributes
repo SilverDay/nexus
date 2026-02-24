@@ -1,0 +1,9 @@
+/.github export-ignore
+/tests export-ignore
+/examples export-ignore
+/.devcontainer export-ignore
+/.vscode export-ignore
+/.idea export-ignore
+/phpunit.xml export-ignore
+/.editorconfig export-ignore
+/.gitignore export-ignore
