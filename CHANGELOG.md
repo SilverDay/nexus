@@ -2,6 +2,15 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.2.3] - 2026-02-24
+
+### Fixed
+- Improved configuration loading for multi-app server deployments by using app-local config discovery first.
+- Added explicit config path argument support for migration runner.
+
+### Documentation
+- Clarified config resolution precedence and multi-app deployment guidance.
+
 ## [0.2.2] - 2026-02-24
 
 ### Fixed

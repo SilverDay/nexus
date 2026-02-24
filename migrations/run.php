@@ -18,8 +18,25 @@ use Nexus\DropInUser\Database\PdoConnectionFactory;
 
 require __DIR__ . '/../vendor/autoload.php';
 
-$configFilePath = getenv('NEXUS_CONFIG_FILE');
-$bootstrap = ModuleConfigLoader::load(is_string($configFilePath) && trim($configFilePath) !== '' ? trim($configFilePath) : null);
+$configFilePath = (static function (array $argv): ?string {
+    if (isset($argv[1]) && is_string($argv[1]) && trim($argv[1]) !== '') {
+        return trim($argv[1]);
+    }
+
+    if (defined('NEXUS_CONFIG_FILE_PATH') && is_string(NEXUS_CONFIG_FILE_PATH) && trim(NEXUS_CONFIG_FILE_PATH) !== '') {
+        return trim(NEXUS_CONFIG_FILE_PATH);
+    }
+
+    $envValue = getenv('NEXUS_CONFIG_FILE');
+    if (is_string($envValue) && trim($envValue) !== '') {
+        return trim($envValue);
+    }
+
+    $localDefault = __DIR__ . '/../examples/config/module.config.php';
+
+    return is_file($localDefault) ? $localDefault : null;
+})($argv ?? []);
+$bootstrap = ModuleConfigLoader::load($configFilePath);
 
 /** @var ModuleConfig $config */
 $config = $bootstrap['config'];

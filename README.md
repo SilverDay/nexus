@@ -103,12 +103,26 @@ Primary keys:
 - `NEXUS_GOOGLE_OIDC_REDIRECT_URI`
 - `NEXUS_PASSKEY_WEBAUTHN_ENABLED`
 
-### B) Config file (`NEXUS_CONFIG_FILE`)
+### B) Config file (app-local by default)
 
-Point `NEXUS_CONFIG_FILE` to a PHP file returning an array.
+The demo router and migration runner look for an app-local config file first:
+
+- `examples/minimal_router.php` defaults to `examples/config/module.config.php`
+- `migrations/run.php` defaults to `examples/config/module.config.php`
+
+Override options (in precedence order):
+
+1. `NEXUS_CONFIG_FILE_PATH` constant in your entrypoint
+2. Web-server scoped `$_SERVER['NEXUS_CONFIG_FILE']`
+3. Process environment variable `NEXUS_CONFIG_FILE`
+4. App-local default file path
+
+You can still use `NEXUS_CONFIG_FILE` when useful, but for multi-app servers prefer app-local files or per-app entrypoint constants.
+
+Migration runner also accepts an explicit config path argument:
 
 ```bash
-export NEXUS_CONFIG_FILE=/workspaces/nexus/examples/config/module.config.php
+php migrations/run.php /path/to/your/module.config.php
 ```
 
 See the template in `examples/config/module.config.php`.

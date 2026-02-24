@@ -62,8 +62,26 @@ use Psr\Log\NullLogger;
 
 require __DIR__ . '/../vendor/autoload.php';
 
-$configFilePath = getenv('NEXUS_CONFIG_FILE');
-$bootstrap = ModuleConfigLoader::load(is_string($configFilePath) && trim($configFilePath) !== '' ? trim($configFilePath) : null);
+$configFilePath = (static function (): ?string {
+    if (defined('NEXUS_CONFIG_FILE_PATH') && is_string(NEXUS_CONFIG_FILE_PATH) && trim(NEXUS_CONFIG_FILE_PATH) !== '') {
+        return trim(NEXUS_CONFIG_FILE_PATH);
+    }
+
+    $serverValue = $_SERVER['NEXUS_CONFIG_FILE'] ?? null;
+    if (is_string($serverValue) && trim($serverValue) !== '') {
+        return trim($serverValue);
+    }
+
+    $envValue = getenv('NEXUS_CONFIG_FILE');
+    if (is_string($envValue) && trim($envValue) !== '') {
+        return trim($envValue);
+    }
+
+    $localDefault = __DIR__ . '/config/module.config.php';
+
+    return is_file($localDefault) ? $localDefault : null;
+})();
+$bootstrap = ModuleConfigLoader::load($configFilePath);
 
 /** @var ModuleConfig $config */
 $config = $bootstrap['config'];
