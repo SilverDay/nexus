@@ -53,6 +53,46 @@ php migrations/run.php
 php -S 127.0.0.1:8080 examples/minimal_router.php
 ```
 
+## Lightweight host-app demo
+
+If you want a cleaner, app-like example (homepage + register/login + restricted user/admin pages), use:
+
+1. Configure the demo in this file:
+
+- `examples/config/module_webapp.config.php`
+
+Set at least:
+
+- `db_dsn`
+- `db_user`
+- `db_password`
+
+2. Run migrations (uses the same config file by default if `NEXUS_CONFIG_FILE` is not set):
+
+```bash
+php migrations/run.php
+```
+
+3. Start the demo app:
+
+```bash
+php -S 127.0.0.1:8081 examples/module_webapp.php
+```
+
+Then open `http://127.0.0.1:8081`.
+
+Optional: use a different config file via environment variable:
+
+```bash
+NEXUS_CONFIG_FILE=/absolute/path/to/your.config.php php -S 127.0.0.1:8081 examples/module_webapp.php
+```
+
+This example demonstrates the intended drop-in style:
+
+- include the module
+- instantiate core services once
+- protect host-app routes using session + role checks
+
 ## Install in a host app
 
 Use Composer to install this module into your application. This is the recommended approach for production usage.

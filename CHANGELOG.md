@@ -2,6 +2,19 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.2.4] - 2026-02-26
+
+### Added
+- Lightweight host-app demo application entrypoint at `examples/module_webapp.php` with a homepage and simple navigation.
+- Restricted demo pages for user and admin areas with session and role checks.
+- Dedicated file-based demo configuration template at `examples/config/module_webapp.config.php`.
+
+### Changed
+- README guidance for running and configuring the lightweight demo, including explicit file-based configuration steps.
+
+### Fixed
+- Demo config template warning cleanup in `examples/config/module.config.php`.
+
 ## [0.2.3] - 2026-02-24
 
 ### Fixed

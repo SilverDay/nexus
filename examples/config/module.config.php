@@ -2,8 +2,6 @@
 
 declare(strict_types=1);
 
-use PDO;
-
 /*
  * Optional drop-in config file for the demo router and migration runner.
  *
@@ -18,7 +16,7 @@ $sharedPdo = null;
 /*
  * Example host-app PDO reuse (uncomment and adapt):
  *
- * $sharedPdo = new PDO(
+ * $sharedPdo = new \PDO(
  *     'mysql:host=127.0.0.1;port=3306;dbname=host_app;charset=utf8mb4',
  *     'host_user',
  *     'host_password',
